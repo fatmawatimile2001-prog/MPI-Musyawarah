@@ -1,0 +1,135 @@
+<!-- ... existing code ... -->
+    <!-- DATA KONTEN -->
+    <script>
+        // --- KONFIGURASI GOOGLE APPS SCRIPT ---
+        // Ganti URL di bawah ini dengan URL Web App dari Google Apps Script setelah di-deploy
+        const GAS_URL = "URL_GAS_ANDA_DISINI";
+
+        const materiData = [
+<!-- ... existing code ... -->
+        // State Management with LocalStorage
+        const defaultState = {
+            student: { name: "", class: "", avatar: "👦" },
+            progress: { belajarComplete: false, bermainComplete: false, berlatihComplete: false },
+            badges: [],
+            currentMenu: 'splash-screen',
+            belajarIndex: 0, bermainIndex: 0, berlatihIndex: 0,
+            scores: { bermain: 0, berlatih: 0 },
+            detailBermain: [],
+            detailBerlatih: []
+        };
+        
+        let appState = JSON.parse(localStorage.getItem('mpi_musyawarah_state')) || defaultState;
+
+        function saveState() { localStorage.setItem('mpi_musyawarah_state', JSON.stringify(appState)); }
+<!-- ... existing code ... -->
+        function submitLogin() {
+            const name = document.getElementById('input-name').value.trim();
+            const cls = document.getElementById('input-class').value;
+            if(!name || !cls) { playSound('wrong'); alert("Isi nama dan kelas dulu ya!"); return; }
+            
+            appState.student.name = name;
+            appState.student.class = cls;
+            saveState();
+            playSound('correct');
+            
+            // Inisialisasi: Kirim struktur Soal ke Database jika sheet belum ada
+            sendSoalToGAS();
+            
+            navTo('dash-screen');
+        }
+
+        // --- GOOGLE APPS SCRIPT INTEGRATION ---
+        function sendSoalToGAS() {
+            if (GAS_URL === "URL_GAS_ANDA_DISINI") return;
+            const payload = { action: "saveSoal", bermainData: bermainData, berlatihData: berlatihData };
+            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+                .catch(e => console.log("Init Info:", e));
+        }
+
+        function sendHasilToGAS() {
+            if (GAS_URL === "https://script.google.com/macros/s/AKfycbyO6wxxtSX2iCRd_194pGmrfjJSMJ3pdIUxY0ebVRvrtWTbA-98y-cAYIT5aBQq2n-4DA/exec") return;
+            showToast("Menyimpan hasil evaluasi ke Server...");
+            const payload = {
+                action: "saveHasil",
+                nama: appState.student.name,
+                kelas: appState.student.class,
+                detailBermain: appState.detailBermain,
+                detailBerlatih: appState.detailBerlatih
+            };
+            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+                .then(res => res.json()).then(data => console.log("Berhasil Simpan:", data))
+                .catch(e => console.log("Gagal mengirim Hasil:", e));
+        }
+        // --------------------------------------
+
+        // Dash Logic
+        function renderDash() {
+<!-- ... existing code ... -->
+        function openMod(type) {
+            playSound('click');
+            if(type === 'belajar') { appState.belajarIndex = 0; renderBelajar(); navTo('belajar-screen'); }
+            if(type === 'bermain') {
+                if(!appState.progress.belajarComplete) { playSound('wrong'); alert('Selesaikan Belajar dulu!'); return; }
+                currentQuizType = 'bermain'; appState.bermainIndex = 0; appState.scores.bermain = 0; 
+                appState.detailBermain = []; // Reset memori jawaban
+                renderQuiz(); navTo('quiz-screen');
+            }
+            if(type === 'berlatih') {
+                if(!appState.progress.bermainComplete) { playSound('wrong'); alert('Selesaikan Bermain dulu!'); return; }
+                currentQuizType = 'berlatih'; appState.berlatihIndex = 0; appState.scores.berlatih = 0; 
+                appState.detailBerlatih = []; // Reset memori jawaban
+                renderQuiz(); navTo('quiz-screen');
+            }
+            if(type === 'laporan') {
+<!-- ... existing code ... -->
+        function checkQuiz(ans, weight) {
+            const btns = document.querySelectorAll('.quiz-btn');
+            btns.forEach((b, i) => { b.disabled = true; });
+            
+            const isCorrect = selectedOpt === ans;
+            const btn = btns[selectedOpt];
+
+            // --- REKAM JAWABAN SISWA ---
+            const qData = currentQuizType === 'bermain' ? bermainData[appState.bermainIndex] : berlatihData[appState.berlatihIndex];
+            const answerDetail = {
+                pertanyaan: qData.q,
+                jawabanSiswa: qData.opts[selectedOpt] || "Tidak Dijawab",
+                kunciJawaban: qData.opts[ans],
+                status: isCorrect ? "Benar" : "Salah"
+            };
+
+            if(currentQuizType === 'bermain') appState.detailBermain[appState.bermainIndex] = answerDetail;
+            else appState.detailBerlatih[appState.berlatihIndex] = answerDetail;
+            
+            saveState(); // Simpan ke local storage
+            // ---------------------------
+
+            if(isCorrect) {
+                playSound('correct');
+<!-- ... existing code ... -->
+        function nextQuiz() {
+            playSound('click');
+            if(currentQuizType === 'bermain') {
+                appState.bermainIndex++;
+                if(appState.bermainIndex >= bermainData.length) {
+                    appState.progress.bermainComplete = true; saveState();
+                    grantBadge("Gamer Pintar", "🎮");
+                    navTo('dash-screen');
+                } else { renderQuiz(); }
+            } else {
+                appState.berlatihIndex++;
+                if(appState.berlatihIndex >= berlatihData.length) {
+                    appState.progress.berlatihComplete = true; saveState();
+                    grantBadge("Master HOTS", "🏆");
+                    
+                    // --- KIRIM DATA SETELAH SEMUA UJIAN SELESAI ---
+                    sendHasilToGAS();
+                    
+                    navTo('dash-screen');
+                } else { renderQuiz(); }
+            }
+        }
+
+        // Laporan Logic
+<!-- ... existing code ... -->
